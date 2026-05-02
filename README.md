@@ -38,25 +38,36 @@ Designed and deployed a distributed wireless sensor network and control network 
   - **Third character (number)** = Unique sensor instance within that tent/type combination
   - Example: `AT1`, `AT2`, `AT3` = three temperature sensors in Tent A; `AC1`, `AC2` = two CO₂ sensors in Tent A
 - **Infinite scalability within naming convention** — adding sensors requires only incrementing the instance number (e.g., AC6, AC7, BT12) with zero code changes; RPi logger auto-detects and aggregates
-- **Per-tent spatial averaging** — system groups sensors by tent prefix (all A* devices → Tent_A.csv) regardless of sensor count, enabling flexible deployment density based on research needs
+- **Per-tent spatial averaging** — system groups sensors by tent prefix (all A* devices → Tent_A.csv) regardless of sensor count, enabling flexible deployment density based on research needs, 
 
 ### 2. Low-Power Design
-- **Deep sleep between readings** — ESP32 consumes ~10µA in sleep mode
+- **Deep sleep between readings** — ESP32 consumes ~10µA in sleep mode vs ~240mA active
+- **Minimal wake time** — each cycle: WiFi connect (2-3s) + sensor read (1-2s) + MQTT publish (1s) = ~5 seconds active per wake
 - **Configurable wake intervals** — 5 min (temp), 10 min (CO₂/light), 6 hr (battery)
-- **Wake counter in RTC memory** — persists across sleep cycles for battery reporting logic
+- **Power budget per cycle:**
+  - Active (5 sec): ~200mA average → 0.28mAh
+  - Sleep (295 sec at 5-min interval): ~10µA → 0.0008mAh
+  - **Effective average current: ~1.7mA** over 5-minute cycle
+- **Battery life calculation:** 3500mAh ÷ 1.7mA ≈ **85 days theoretical**, 30+ days practical (accounting for battery sag and WiFi variance)
+- **Wake counter in RTC memory** — persists across sleep cycles for battery reporting logic without incrementing during power loss
 
 ### 3. Robust Data Handling
-- **35-minute staleness detection** — excludes unresponsive sensors from averages automatically
-- **Per-tent aggregation** — calculates spatial averages every 5 minutes
-- **Graceful degradation** — system continues with partial data if nodes fail
+- **Immediate persistence** — every MQTT message logged to individual CSVs (`temperature_log.csv`, `co2_log.csv`, `light_log.csv`, `battery_log.csv`) upon receipt, ensuring no data loss even during system crashes
+- **In-memory state management** — RPi maintains latest value and `last_seen` timestamp per sensor in Python dictionary; grouped aggregation queries this state rather than re-parsing CSVs
+- **Per-tent spatial averaging** — background thread calculates averages every 5 minutes from in-memory state, writes to grouped CSVs (`Tent_A.csv`, `Tent_B.csv`, etc.)
+- **35-minute staleness detection** — sensors remain in averaging pool using their last-reported value for up to 35 minutes after dropout; automatically excluded from calculations beyond this threshold to prevent stale data dilution
+- **Automatic recovery** — when previously-stale sensor resumes transmission, immediately re-included in next averaging cycle with no manual intervention required
+- **Graceful degradation** — spatial averages calculated from available sensors only; Tent_A continues reporting even if AT3 fails, using AT1+AT2 average until AT3 recovers
+- **Audit trail via device tracking** — grouped CSVs include `devices_used` column showing which sensors contributed to each average, enabling post-analysis fault detection
 
 ### 4. Production Reliability
 - **Systemd service** — auto-starts on boot, restarts on failure
-- **Hardware RTC timestamping** — accurate logging even without internet/NTP
+- **Hardware RTC timestamping** — accurate logging even without internet/NTP, the DS3231 RTC module keeps the clock running with backup battery.
 - **Dual CSV output** — raw sensor data + grouped tent averages
 - **Zero-touch operation** — runs headless for months
 
----
+--
+
 
 ## Hardware Bill of Materials
 
@@ -64,26 +75,60 @@ Designed and deployed a distributed wireless sensor network and control network 
 - ESP32 DevKit (1x)
 - DS18B20 waterproof temperature probe (1x)
 - 18650 Li-ion battery 3500mAh (1x)
-- 4.7kΩ pull-up resistor (1x)
-- 100µF decoupling capacitor (1x)
+- 18650 battery holder (1x) — no built-in protection
+- **Power regulation circuit:**
+  - MCP1700-3302E/TO 3.3V LDO voltage regulator (1x)
+  - 100µF electrolytic capacitor, 25V (1x) — regulator input filtering
+  - 10µF ceramic capacitor, 50V (1x) — regulator output filtering
+- 4.7kΩ pull-up resistor (1x) — for DS18B20 data line
+- 10kΩ resistor (2x) — voltage divider for battery monitoring
 
 **Per CO₂ Node:**
 - ESP32 DevKit (1x)
 - SenseAir S8 LP CO₂ sensor (1x)
-- L7805 voltage regulator (1x)
-- 4xAA battery holder + batteries (1x)
+- **5V regulation circuit for CO₂ sensor:**
+  - L7805 voltage regulator (1x)
+  - 100µF electrolytic capacitor, 25V (1x) — L7805 input filtering
+  - 10µF ceramic capacitor, 50V (1x) — L7805 output filtering
+- 4xAA battery holder (1x)
+- AA alkaline batteries (4x)
+- **ESP32 power regulation circuit:**
+  - MCP1700-3302E/TO 3.3V LDO voltage regulator (1x)
+  - 100µF electrolytic capacitor, 25V (1x) — regulator input
+  - 10µF ceramic capacitor, 50V (1x) — regulator output
+- 10kΩ resistor (2x) — voltage divider for battery monitoring
 
 **Per Light Node:**
 - ESP32 DevKit (1x)
-- Adafruit VEML7700 lux sensor (1x)
-- 18650 Li-ion battery (1x)
+- Adafruit VEML7700 lux sensor breakout (1x)
+- 18650 Li-ion battery 3500mAh (1x)
+- 18650 battery holder (1x) — no built-in protection
+- **Power regulation circuit:**
+  - MCP1700-3302E/TO 3.3V LDO voltage regulator (1x)
+  - 100µF electrolytic capacitor, 25V (1x) — regulator input filtering
+  - 10µF ceramic capacitor, 50V (1x) — regulator output filtering
+- 10kΩ resistor (2x) — voltage divider for battery monitoring
+
+**Per Control Node:**
+- ESP32 DevKit (1x)
+- DS3231 RTC module with coin cell battery (1x)
+- 4-channel relay module (1x)
+- Power supply: mains power adapter 5V/2A
 
 **Base Station:**
-- Raspberry Pi 4 (1x)
-- DS3231 RTC module with coin cell (1x)
-- TP-Link WiFi access point (1x)
+- Raspberry Pi 4 Model B, 4GB RAM (1x)
+- DS3231 RTC module with CR2032 coin cell (1x)
+- MicroSD card, 32GB Class 10 (1x)
+- TP-Link WiFi access point (TL-WA801N or equivalent) (1x)
+- Ethernet cable CAT5e (1x)
+- 5V/3A USB-C power supply for RPi (1x)
+- Raspberry Pi fan cooling system.
 
----
+**Common Hardware:**
+- Breadboard jumper wires
+- Solder and soldering iron
+- 3D-printed enclosures or ABS project boxes (optional but recommended)
+
 
 ## Software Architecture
 
@@ -407,28 +452,7 @@ S8 U-RX → ESP32 GPIO26
     └── BOM.csv                  # Full bill of materials
 ```
 
----
 
-## Acknowledgments
 
-Developed during Research Aid position at **Texas Tech University**, Fiber and Biopolymer Research Institute under Dr. Christopher Turner.
 
-Special thanks to the TTU Makerspace for prototyping facilities and to the open-source community for libraries that made this possible.
 
----
-
-## License
-
-MIT License — feel free to use this design for your own agricultural monitoring needs.
-
----
-
-## Contact
-
-**Kadhir Parani**  
-Electronics and Communication Engineering  
-National Institute of Technology Tiruchirappalli  
-📧 kadhirparani180@gmail.com  
-🔗 [LinkedIn](https://shorturl.at/mYhNS)
-
-*Last Updated: April 2026*
