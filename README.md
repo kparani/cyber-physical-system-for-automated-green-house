@@ -1,5 +1,5 @@
-# Distributed IoT Sensor Network for Agricultural Heat Stress Resear
 
+# 40-Node ESP32/MQTT Distributed IoT System with Deep Sleep Optimization
 **Autonomous multi-node environmental monitoring system deployed at Texas Tech University's Fiber and Biopolymer Research Institute**
 
 ![System Status](https://img.shields.io/badge/status-production-brightgreen) ![Nodes](https://img.shields.io/badge/nodes-40%2B-blue) ![Uptime](https://img.shields.io/badge/uptime-99%25%2B-success)
@@ -8,7 +8,7 @@
 
 ## Project Overview
 
-Designed and deployed a distributed wireless sensor network to monitor environmental conditions across controlled heat stress growth tents for cotton phenotyping research. The system autonomously collects temperature, CO₂, light intensity, and battery health data from 40+ ESP32 nodes, aggregates telemetry via MQTT to a Raspberry Pi base station, and exports timestamped CSV datasets for scientific analysis.
+Designed and deployed a distributed wireless sensor network and control network to monitor and contriol field based greenhouse for cotton phenotyping research. The system autonomously collects temperature, CO₂, light intensity, and battery health data from 40+ ESP32 nodes, aggregates telemetry via MQTT to a Raspberry Pi base station, and exports timestamped CSV datasets for scientific analysis. A seperate network of ESP32 controlls the opening\closing of the greenhouse side flaps.
 
 **Key Achievement:** 30+ day battery life per node with deep sleep optimization while maintaining 5-minute data granularity.
 
@@ -30,9 +30,15 @@ Designed and deployed a distributed wireless sensor network to monitor environme
 ## Key Features
 
 ### 1. Distributed Sensor Network
-- **40+ autonomous nodes** across 5 tents (A-E)
-- **Dynamic device discovery** — automatically handles variable node counts per tent
-- **Flexible naming scheme** — AT1/AT2 (temp), AC1 (CO₂), AL1 (light) for easy identification
+- **40+ autonomous nodes** across 3 active tents (A-C) with infrastructure for 5 tents (A-E) to support future scaling
+- **Dynamic device discovery** — system automatically detects and integrates new sensors without configuration changes; handles variable node counts per tent seamlessly
+- **Hierarchical naming scheme** enables unique identification and logical grouping:
+  - **First character (letter)** = Tent ID (A, B, C, D, E)
+  - **Second character (letter)** = Parameter type (T=Temperature, C=CO₂, L=Light intensity)
+  - **Third character (number)** = Unique sensor instance within that tent/type combination
+  - Example: `AT1`, `AT2`, `AT3` = three temperature sensors in Tent A; `AC1`, `AC2` = two CO₂ sensors in Tent A
+- **Infinite scalability within naming convention** — adding sensors requires only incrementing the instance number (e.g., AC6, AC7, BT12) with zero code changes; RPi logger auto-detects and aggregates
+- **Per-tent spatial averaging** — system groups sensors by tent prefix (all A* devices → Tent_A.csv) regardless of sensor count, enabling flexible deployment density based on research needs
 
 ### 2. Low-Power Design
 - **Deep sleep between readings** — ESP32 consumes ~10µA in sleep mode
