@@ -10,8 +10,11 @@
 
 Designed and deployed a distributed wireless sensor network and control network to monitor and contriol field based greenhouse for cotton phenotyping research. The system autonomously collects temperature, CO₂, light intensity, and battery health data from 40+ ESP32 nodes, aggregates telemetry via MQTT to a Raspberry Pi base station, and exports timestamped CSV datasets for scientific analysis. A seperate network of ESP32 controlls the opening\closing of the greenhouse side flaps.
 
-**Key Achievement:** 30+ day battery life per node with deep sleep optimization while maintaining 5-minute data granularity.
-
+**Key Achievements:** 
+- **30+ day battery life per node** with deep sleep optimization while maintaining 5-minute data granularity
+- **Zero-configuration scalability** — add/remove sensors without code changes; system auto-detects and aggregates
+- **Fault-tolerant architecture** — gracefully handles edge node failures; continues operation with partial sensor arrays (e.g., tent with 2/5 sensors operational still reports valid spatial averages)
+- **Flexible deployment density** — supports variable sensor counts per tent (1-N nodes) based on research requirements without infrastructure modifications
 
 ## Technical Stack
 
